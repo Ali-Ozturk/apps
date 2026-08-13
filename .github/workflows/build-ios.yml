@@ -43,48 +43,27 @@ jobs:
         working-directory: ios
         run: pod install
 
-      - name: Detect Xcode workspace and scheme
+      - name: Configure Xcode workspace and scheme
         id: xcode
         shell: bash
         run: |
           set -euo pipefail
 
-          WORKSPACE="$(find ios -maxdepth 1 -name "*.xcworkspace" -print -quit)"
+          WORKSPACE="ios/HelloWorld.xcworkspace"
+          SCHEME="HelloWorld"
 
-          if [ -z "$WORKSPACE" ]; then
-            echo "No .xcworkspace found in ios/"
+          if [ ! -d "$WORKSPACE" ]; then
+            echo "Workspace does not exist: $WORKSPACE"
             exit 1
           fi
 
-          echo "Found workspace: $WORKSPACE"
-
-          echo "Available schemes:"
-          xcodebuild -workspace "$WORKSPACE" -list
-
-          SCHEME="$(xcodebuild \
-            -workspace "$WORKSPACE" \
-            -list \
-            -json | python3 -c '
-          import json, sys
-
-          data = json.load(sys.stdin)
-          schemes = data.get("workspace", {}).get("schemes", [])
-
-          if not schemes:
-              raise SystemExit("No Xcode schemes found")
-
-          # Prefer a scheme that looks like the actual app rather than Pods/dependencies.
-          candidates = [
-              s for s in schemes
-              if not s.startswith(("Pods-", "React", "Expo"))
-          ]
-
-          scheme = candidates[0] if candidates else schemes[0]
-
-          print(scheme)
-          ')"
-
+          echo "Using workspace: $WORKSPACE"
           echo "Using scheme: $SCHEME"
+
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -showBuildSettings > /dev/null
 
           echo "workspace=$WORKSPACE" >> "$GITHUB_OUTPUT"
           echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
@@ -113,25 +92,23 @@ jobs:
         run: |
           set -euo pipefail
 
-          APP_PATH="$(find build/DerivedData/Build/Products \
-            -type d \
-            -name "*.app" \
-            ! -path "*/Pods.build/*" \
-            ! -path "*/XCFrameworkIntermediates/*" \
-            -print \
-            -quit)"
+          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/HelloWorld.app"
 
-          if [ -z "$APP_PATH" ]; then
-            echo "Could not find built .app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Expected app not found at:"
+            echo "$APP_PATH"
+
             echo
-            echo "Searching entire DerivedData:"
-            find build/DerivedData -type d -name "*.app" -print || true
+            echo "Available .app bundles:"
+            find build/DerivedData/Build/Products \
+              -type d \
+              -name "*.app" \
+              -print || true
+
             exit 1
           fi
 
-          echo "Found app:"
-          echo "$APP_PATH"
-
+          echo "Found app: $APP_PATH"
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Show app metadata
