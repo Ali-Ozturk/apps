@@ -23,6 +23,10 @@
         "projectId": "f499c8e1-73a7-45bd-b5a4-9f327307f205"
       }
     },
-    "owner": "aliyo"
+    "owner": "aliyo",
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      "expo-notifications"
+    ]
   }
 }

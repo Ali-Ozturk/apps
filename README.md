@@ -1,6 +1,6 @@
-# Hello World iOS
+# iOS Notification Scheduler
 
-A tiny React Native app using Expo, ready for an iOS `.ipa` build with EAS.
+A React Native app using Expo SDK 54 for scheduling local iOS notifications.
 
 ## Run locally
 
@@ -9,7 +9,15 @@ npm install
 npm start
 ```
 
-This opens Expo Dev Tools. You can scan the QR code with Expo Go for quick testing.
+Scan the QR code with Expo Go on iOS. The app lets you:
+
+- enter a notification message
+- choose a date and time
+- make it one-time or recurring
+- repeat daily, weekly, monthly, or yearly
+- view and cancel scheduled notifications
+
+Local notifications need iOS notification permission. The app asks for it when you tap Allow or schedule your first reminder.
 
 ## Build an IPA
 
@@ -21,7 +29,7 @@ npx eas-cli init
 npm run ios:ipa
 ```
 
-EAS will ask for Apple Developer credentials and can manage signing for you. When the build finishes, it gives you a download link for the `.ipa`.
+EAS will ask for Apple Developer credentials unless you build an unsigned archive. When the build finishes, it gives you a download link for the artifact.
 
 For a simulator build instead:
 

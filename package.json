@@ -5,12 +5,14 @@
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
-    "ios:ipa": "npx eas-cli build --platform ios --profile sidestore",
-    "ios:simulator": "npx eas-cli build --platform ios --profile simulator"
+    "ios:ipa": "eas build --platform ios --profile sidestore",
+    "ios:simulator": "eas build --platform ios --profile simulator"
   },
   "dependencies": {
+    "@react-native-community/datetimepicker": "8.4.4",
     "babel-preset-expo": "~54.0.12",
     "expo": "~54.0.36",
+    "expo-notifications": "~0.32.17",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
     "react-native": "0.81.5"
