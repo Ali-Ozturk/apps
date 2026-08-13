@@ -49,6 +49,11 @@ function replacePattern(filePath, pattern, after, label) {
 
 const expoWidgetsPath = path.join(process.cwd(), 'node_modules', 'expo-widgets');
 const expoUiPath = path.join(process.cwd(), 'node_modules', '@expo', 'ui');
+const widgetsBundleScriptPath = path.join(
+  expoWidgetsPath,
+  'scripts',
+  'build-bundle.mjs'
+);
 const autolinkingPath = path.join(
   process.cwd(),
   'node_modules',
@@ -74,6 +79,14 @@ try {
   const expoUiVersion = readPackageVersion('@expo/ui');
 
   if (expoVersion?.startsWith('54.') && expoUiVersion?.startsWith('55.')) {
+    changed =
+      replacePattern(
+        widgetsBundleScriptPath,
+        /\r?\n    '--skip-server',/,
+        '',
+        'expo-widgets bundle script'
+      ) || changed;
+
     const hostViewPath = path.join(expoUiPath, 'ios', 'HostView.swift');
     const rnHostViewPath = path.join(expoUiPath, 'ios', 'RNHostView.swift');
     const listViewPath = path.join(expoUiPath, 'ios', 'ListView.swift');
