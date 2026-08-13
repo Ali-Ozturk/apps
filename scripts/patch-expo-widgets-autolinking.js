@@ -9,7 +9,7 @@ function readPackageVersion(packageName) {
   }
 }
 
-function replaceOnce(filePath, before, after, label) {
+function replaceOnce(filePath, before, after, label, options = {}) {
   const source = fs.readFileSync(filePath, 'utf8');
 
   if (after && source.includes(after)) {
@@ -17,7 +17,7 @@ function replaceOnce(filePath, before, after, label) {
   }
 
   if (!source.includes(before)) {
-    if (!after) {
+    if (!after || options.optional) {
       return false;
     }
 
@@ -25,6 +25,25 @@ function replaceOnce(filePath, before, after, label) {
   }
 
   fs.writeFileSync(filePath, source.replace(before, after));
+  return true;
+}
+
+function ensureIncludes(filePath, expected, label) {
+  const source = fs.readFileSync(filePath, 'utf8');
+  if (!source.includes(expected)) {
+    throw new Error(`${label} patch failed: expected patched source was not found in ${filePath}.`);
+  }
+}
+
+function replacePattern(filePath, pattern, after, label) {
+  const source = fs.readFileSync(filePath, 'utf8');
+  const nextSource = source.replace(pattern, after);
+
+  if (nextSource === source) {
+    return false;
+  }
+
+  fs.writeFileSync(filePath, nextSource);
   return true;
 }
 
@@ -57,6 +76,9 @@ try {
   if (expoVersion?.startsWith('54.') && expoUiVersion?.startsWith('55.')) {
     const hostViewPath = path.join(expoUiPath, 'ios', 'HostView.swift');
     const rnHostViewPath = path.join(expoUiPath, 'ios', 'RNHostView.swift');
+    const listViewPath = path.join(expoUiPath, 'ios', 'ListView.swift');
+    const pickerViewPath = path.join(expoUiPath, 'ios', 'Picker', 'PickerView.swift');
+    const baseViewPath = path.join(expoUiPath, 'ios', 'UIBaseView.swift');
     const baseViewPropsPath = path.join(expoUiPath, 'ios', 'UIBaseViewProps.swift');
 
     changed =
@@ -98,8 +120,55 @@ try {
       replaceOnce(
         baseViewPropsPath,
         '  public required init(rawProps: [String: Any], context: AppContext) throws {\n    try super.init(rawProps: rawProps, context: context)\n  }',
+        '  public required init(rawProps: [String: Any], context: AppContext) throws {\n    super.init()\n    try update(withDict: rawProps, appContext: context)\n  }',
+        '@expo/ui ViewProps initializer',
+        { optional: true }
+      ) || changed;
+    changed =
+      replaceOnce(
+        baseViewPropsPath,
         '  public required init(rawProps: [String: Any], context: AppContext) throws {\n    try super.init(from: rawProps, appContext: context)\n  }',
-        '@expo/ui ViewProps initializer'
+        '  public required init(rawProps: [String: Any], context: AppContext) throws {\n    super.init()\n    try update(withDict: rawProps, appContext: context)\n  }',
+        '@expo/ui ViewProps initializer',
+        { optional: true }
+      ) || changed;
+    ensureIncludes(
+      baseViewPropsPath,
+      '  public required init(rawProps: [String: Any], context: AppContext) throws {\n    super.init()\n    try update(withDict: rawProps, appContext: context)\n  }',
+      '@expo/ui ViewProps initializer'
+    );
+    changed =
+      replacePattern(
+        baseViewPath,
+        /\r?\n\/\/ MARK: - ViewWrapper\r?\n\r?\nextension UIBaseView: ExpoSwiftUI\.ViewWrapper \{\r?\n  public func getWrappedView\(\) -> Any \{\r?\n    return innerView\r?\n  \}\r?\n\}\r?\n/,
+        '\n',
+        '@expo/ui ViewWrapper'
+      ) || changed;
+    changed =
+      replacePattern(
+        baseViewPath,
+        /  return ExpoSwiftUI\.ViewDefinition\(wrappedType, name: contentName, elements: elements\(\)\)/,
+        '  return View(wrappedType) {\n    ViewName(contentName)\n  }',
+        '@expo/ui ViewDefinition overload'
+      ) || changed;
+    ensureIncludes(
+      baseViewPath,
+      '  return View(wrappedType) {\n    ViewName(contentName)\n  }',
+      '@expo/ui ViewDefinition overload'
+    );
+    changed =
+      replaceOnce(
+        listViewPath,
+        '    .onChange(of: props.selection) { newValue in\n      selection = Self.getHashableSetFromEither(newValue)\n    }\n',
+        '',
+        '@expo/ui ListView selection observer'
+      ) || changed;
+    changed =
+      replaceOnce(
+        pickerViewPath,
+        '    .onChange(of: props.selection) { newValue in\n      selection = Self.getHashableFromEither(newValue)\n    }\n',
+        '',
+        '@expo/ui PickerView selection observer'
       ) || changed;
   }
 } catch (error) {
