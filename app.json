@@ -10,7 +10,7 @@
       "**/*"
     ],
     "ios": {
-      "buildNumber": "14",
+      "buildNumber": "15",
       "supportsTablet": true,
       "bundleIdentifier": "com.alioz.everydaytoolbox",
       "infoPlist": {
