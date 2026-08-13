@@ -1,0 +1,168 @@
+name: Build unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+
+jobs:
+  build-ios:
+    name: Build unsigned IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Generate native iOS project
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Install CocoaPods dependencies
+        working-directory: ios
+        run: pod install
+
+      - name: Detect Xcode workspace and scheme
+        id: xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          WORKSPACE="$(find ios -maxdepth 1 -name "*.xcworkspace" -print -quit)"
+
+          if [ -z "$WORKSPACE" ]; then
+            echo "No .xcworkspace found in ios/"
+            exit 1
+          fi
+
+          echo "Found workspace: $WORKSPACE"
+
+          SCHEME="$(xcodebuild \
+            -workspace "$WORKSPACE" \
+            -list \
+            -json | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          schemes = data.get("workspace", {}).get("schemes", [])
+          if not schemes:
+              raise SystemExit("No Xcode schemes found")
+          print(schemes[0])
+          ')"
+
+          echo "Using scheme: $SCHEME"
+
+          echo "workspace=$WORKSPACE" >> "$GITHUB_OUTPUT"
+          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
+
+      - name: Build unsigned iPhone app
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          xcodebuild \
+            -workspace "${{ steps.xcode.outputs.workspace }}" \
+            -scheme "${{ steps.xcode.outputs.scheme }}" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath "$PWD/build/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            clean build
+
+      - name: Find built app
+        id: app
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP_PATH="$(find build/DerivedData/Build/Products/Release-iphoneos \
+            -maxdepth 1 \
+            -name "*.app" \
+            -type d \
+            -print \
+            -quit)"
+
+          if [ -z "$APP_PATH" ]; then
+            echo "Could not find built .app"
+            echo
+            echo "Contents of build products:"
+            find build/DerivedData/Build/Products -maxdepth 3 -print || true
+            exit 1
+          fi
+
+          echo "Found app:"
+          echo "$APP_PATH"
+
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Show app metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PLIST="${{ steps.app.outputs.app_path }}/Info.plist"
+
+          echo "App name:"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Print :CFBundleName" "$PLIST"
+
+          echo "Bundle identifier:"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST"
+
+          echo "Version:"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST"
+
+          echo "Build:"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST"
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf ipa
+          mkdir -p ipa/Payload
+
+          cp -R "${{ steps.app.outputs.app_path }}" ipa/Payload/
+
+          cd ipa
+          zip -qry ../hello-world.ipa Payload
+          cd ..
+
+          echo "Created IPA:"
+          ls -lh hello-world.ipa
+
+      - name: Verify IPA contents
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          unzip -l hello-world.ipa | head -50
+
+          if ! unzip -l hello-world.ipa | grep -q "Payload/.*\.app/Info.plist"; then
+            echo "IPA does not contain an iOS .app bundle"
+            exit 1
+          fi
+
+          echo "IPA structure looks valid."
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-world-unsigned-ipa
+          path: hello-world.ipa
+          if-no-files-found: error
+          retention-days: 30

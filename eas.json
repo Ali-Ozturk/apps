@@ -4,9 +4,9 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "preview": {
+    "sidestore": {
       "ios": {
-        "distribution": "internal",
+        "withoutCredentials": true,
         "simulator": false
       }
     },
@@ -14,9 +14,6 @@
       "ios": {
         "simulator": true
       }
-    },
-    "production": {
-      "autoIncrement": true
     }
   }
 }
