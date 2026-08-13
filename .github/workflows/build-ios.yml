@@ -107,7 +107,7 @@ jobs:
             DEVELOPMENT_TEAM="" \
             clean build
 
-        - name: Find built app
+      - name: Find built app
         id: app
         shell: bash
         run: |
