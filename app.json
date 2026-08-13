@@ -2,13 +2,14 @@
   "expo": {
     "name": "Hello World",
     "slug": "hello-world-ios",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
+      "buildNumber": "2",
       "supportsTablet": true,
       "bundleIdentifier": "com.alioz.helloworldios",
       "infoPlist": {

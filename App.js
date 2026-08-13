@@ -32,6 +32,19 @@ const repeatOptions = [
   { label: 'Yearly', value: 'yearly' },
 ];
 
+const noticeOptions = [
+  {
+    label: 'Normal',
+    value: 'normal',
+    description: 'Standard notification with sound.',
+  },
+  {
+    label: 'Alarm-like',
+    value: 'alarm',
+    description: 'Time Sensitive alert with sound so it is harder to miss.',
+  },
+];
+
 const defaultMessage = 'This is a message created by the user';
 
 export default function App() {
@@ -39,6 +52,7 @@ export default function App() {
   const [scheduledAt, setScheduledAt] = useState(() => getDefaultDate());
   const [isRecurring, setIsRecurring] = useState(false);
   const [repeatEvery, setRepeatEvery] = useState('daily');
+  const [noticeStyle, setNoticeStyle] = useState('normal');
   const [permissionStatus, setPermissionStatus] = useState('checking');
   const [scheduledNotifications, setScheduledNotifications] = useState([]);
 
@@ -66,6 +80,7 @@ export default function App() {
         allowAlert: true,
         allowBadge: false,
         allowSound: true,
+        allowDisplayInCarPlay: true,
       },
     });
 
@@ -109,10 +124,12 @@ export default function App() {
 
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Reminder',
+        title: noticeStyle === 'alarm' ? 'Alarm Reminder' : 'Reminder',
         body: trimmedMessage,
         sound: true,
+        interruptionLevel: noticeStyle === 'alarm' ? 'timeSensitive' : 'active',
         data: {
+          noticeStyle,
           repeatEvery: isRecurring ? repeatEvery : 'once',
           scheduledAt: scheduledAt.toISOString(),
         },
@@ -181,6 +198,35 @@ export default function App() {
                   style={styles.messageInput}
                   value={message}
                 />
+
+                <Text style={styles.label}>Notice style</Text>
+                <View style={styles.noticeOptions}>
+                  {noticeOptions.map((option) => {
+                    const selected = noticeStyle === option.value;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => setNoticeStyle(option.value)}
+                        style={[styles.noticeOption, selected && styles.noticeOptionSelected]}
+                      >
+                        <View style={styles.noticeOptionHeader}>
+                          <View style={[styles.radio, selected && styles.radioSelected]}>
+                            {selected ? <View style={styles.radioDot} /> : null}
+                          </View>
+                          <Text
+                            style={[
+                              styles.noticeOptionTitle,
+                              selected && styles.noticeOptionTitleSelected,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </View>
+                        <Text style={styles.noticeOptionDescription}>{option.description}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
 
                 <Text style={styles.label}>Date</Text>
                 <View style={styles.pickerFrame}>
@@ -365,14 +411,16 @@ function formatTime(date) {
 function describeRequest(request) {
   const repeatEvery = request.content?.data?.repeatEvery;
   const scheduledAt = request.content?.data?.scheduledAt;
+  const noticeStyle = request.content?.data?.noticeStyle;
+  const prefix = noticeStyle === 'alarm' ? 'Alarm-like, ' : '';
 
   if (repeatEvery && repeatEvery !== 'once') {
     const date = scheduledAt ? new Date(scheduledAt) : null;
-    return `${capitalize(repeatEvery)}${date ? ` at ${formatTime(date)}` : ''}`;
+    return `${prefix}${capitalize(repeatEvery)}${date ? ` at ${formatTime(date)}` : ''}`;
   }
 
   if (scheduledAt) {
-    return `One time on ${formatDateTime(new Date(scheduledAt))}`;
+    return `${prefix}One time on ${formatDateTime(new Date(scheduledAt))}`;
   }
 
   return 'Scheduled notification';
@@ -459,6 +507,59 @@ const styles = StyleSheet.create({
     padding: 12,
     textAlignVertical: 'top',
     marginBottom: 18,
+  },
+  noticeOptions: {
+    gap: 10,
+    marginBottom: 18,
+  },
+  noticeOption: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#D7DEE8',
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 12,
+  },
+  noticeOptionSelected: {
+    backgroundColor: '#EEF6FF',
+    borderColor: '#1677FF',
+  },
+  noticeOptionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 5,
+  },
+  noticeOptionTitle: {
+    color: '#344054',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  noticeOptionTitleSelected: {
+    color: '#0F4C9E',
+  },
+  noticeOptionDescription: {
+    color: '#667085',
+    fontSize: 13,
+    lineHeight: 18,
+    paddingLeft: 30,
+  },
+  radio: {
+    alignItems: 'center',
+    borderColor: '#98A2B3',
+    borderRadius: 10,
+    borderWidth: 2,
+    height: 20,
+    justifyContent: 'center',
+    width: 20,
+  },
+  radioSelected: {
+    borderColor: '#1677FF',
+  },
+  radioDot: {
+    backgroundColor: '#1677FF',
+    borderRadius: 5,
+    height: 10,
+    width: 10,
   },
   pickerFrame: {
     backgroundColor: '#F8FAFC',
