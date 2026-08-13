@@ -10,6 +10,14 @@
         "simulator": false
       }
     },
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "autoIncrement": false,
+        "simulator": false
+      }
+    },
     "simulator": {
       "ios": {
         "simulator": true

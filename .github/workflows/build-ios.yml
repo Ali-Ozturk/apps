@@ -1,4 +1,4 @@
-name: Build unsigned iOS IPA
+name: Build iOS IPA
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-ios:
-    name: Build unsigned IPA
+    name: Build iOS IPA
     runs-on: macos-latest
 
     steps:
@@ -49,8 +49,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          WORKSPACE="ios/HelloWorld.xcworkspace"
-          SCHEME="HelloWorld"
+          WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
 
           if [ ! -d "$WORKSPACE" ]; then
             echo "Workspace does not exist: $WORKSPACE"
@@ -92,7 +92,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/HelloWorld.app"
+          APP_PATH="$(find build/DerivedData/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' -print -quit)"
 
           if [ ! -d "$APP_PATH" ]; then
             echo "Expected app not found at:"
@@ -136,17 +136,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          APP_SLUG="$(node -p "require('./app.json').expo.slug")"
+          IPA_NAME="${APP_SLUG}.ipa"
+
           rm -rf ipa
           mkdir -p ipa/Payload
 
           cp -R "${{ steps.app.outputs.app_path }}" ipa/Payload/
 
           cd ipa
-          zip -qry ../hello-world.ipa Payload
+          zip -qry "../${IPA_NAME}" Payload
           cd ..
 
           echo "Created IPA:"
-          ls -lh hello-world.ipa
+          ls -lh "${IPA_NAME}"
       
       - name: Generate SideStore source.json
         shell: bash
@@ -164,7 +167,9 @@ jobs:
           BUILD_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST")"
           MIN_IOS="$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$PLIST" 2>/dev/null || true)"
 
-          IPA_SIZE="$(stat -f%z hello-world.ipa)"
+          APP_SLUG="$(node -p "require('./app.json').expo.slug")"
+          IPA_NAME="${APP_SLUG}.ipa"
+          IPA_SIZE="$(stat -f%z "${IPA_NAME}")"
           RELEASE_DATE="$(date -u +"%Y-%m-%d")"
 
           export NAME
@@ -172,6 +177,7 @@ jobs:
           export VERSION
           export BUILD_VERSION
           export MIN_IOS
+          export APP_SLUG
           export IPA_SIZE
           export RELEASE_DATE
 
@@ -184,7 +190,7 @@ jobs:
               "buildVersion": os.environ["BUILD_VERSION"],
               "date": os.environ["RELEASE_DATE"],
               "size": int(os.environ["IPA_SIZE"]),
-              "downloadURL": "https://apps.alihan.dk/ipa/hello-world.ipa",
+              "downloadURL": f"https://apps.alihan.dk/ipa/{os.environ['APP_SLUG']}.ipa",
               "localizedDescription": "Automated build."
           }
 
@@ -193,7 +199,7 @@ jobs:
 
           source = {
               "$schema": "https://github.com/SideStore/sidestore-source-types/raw/main/schema.json",
-              "name": "Ali's Apps",
+              "name": "Everyday Toolbox",
               "identifier": "dk.alihan.apps",
               "sourceURL": "https://apps.alihan.dk/source.json",
               "apps": [
@@ -203,7 +209,7 @@ jobs:
                       "developerName": "Ali",
                       "subtitle": "Personal iOS apps",
                       "localizedDescription": "Personal app distributed through apps.alihan.dk.",
-                      "iconURL": "https://apps.alihan.dk/icons/hello-world.png",
+                      "iconURL": f"https://apps.alihan.dk/icons/{os.environ['APP_SLUG']}.png",
                       "versions": [
                           version_entry
                       ]
@@ -222,9 +228,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          unzip -l hello-world.ipa | head -50
+          APP_SLUG="$(node -p "require('./app.json').expo.slug")"
+          IPA_NAME="${APP_SLUG}.ipa"
 
-          if ! unzip -l hello-world.ipa | grep -q "Payload/.*\.app/Info.plist"; then
+          unzip -l "${IPA_NAME}" | head -50
+
+          if ! unzip -l "${IPA_NAME}" | grep -q "Payload/.*\.app/Info.plist"; then
             echo "IPA does not contain an iOS .app bundle"
             exit 1
           fi
@@ -234,9 +243,9 @@ jobs:
       - name: Upload IPA and SideStore source
         uses: actions/upload-artifact@v4
         with:
-          name: hello-world-sidestore
+          name: everyday-toolbox-sidestore
           path: |
-            hello-world.ipa
+            *.ipa
             source.json
           if-no-files-found: error
           retention-days: 30

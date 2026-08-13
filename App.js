@@ -1,715 +1,77 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  SafeAreaView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldPlaySound: true, shouldSetBadge: false, shouldShowBanner: true, shouldShowList: true }) });
 
-const repeatOptions = [
-  { label: 'Daily', value: 'daily' },
-  { label: 'Weekly', value: 'weekly' },
-  { label: 'Monthly', value: 'monthly' },
-  { label: 'Yearly', value: 'yearly' },
+const KEYS = { last: 'toolbox.last', countdown: 'toolbox.countdown', groceries: 'toolbox.groceries', api: 'toolbox.api' };
+const tools = [
+  { id: 'reminders', title: 'Reminders', icon: '◷', description: 'Schedule local notifications' },
+  { id: 'last', title: 'Last Time', icon: '↻', description: 'Track when you last did something' },
+  { id: 'countdown', title: 'Countdowns', icon: '⌛', description: 'See time remaining to events' },
+  { id: 'groceries', title: 'Grocery List', icon: '✓', description: 'Keep today\'s list and history' },
+  { id: 'api', title: 'API Toolbox', icon: '{}', description: 'Run saved API actions securely' },
 ];
-
-const noticeOptions = [
-  {
-    label: 'Normal',
-    value: 'normal',
-    description: 'Standard notification with sound.',
-  },
-  {
-    label: 'Alarm-like',
-    value: 'alarm',
-    description: 'Time Sensitive alert with sound so it is harder to miss.',
-  },
-];
-
-const defaultMessage = 'This is a message created by the user';
+const repeatOptions = [{ label: 'Daily', value: 'daily' }, { label: 'Weekly', value: 'weekly' }, { label: 'Monthly', value: 'monthly' }, { label: 'Yearly', value: 'yearly' }];
 
 export default function App() {
-  const [message, setMessage] = useState(defaultMessage);
-  const [scheduledAt, setScheduledAt] = useState(() => getDefaultDate());
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [repeatEvery, setRepeatEvery] = useState('daily');
-  const [noticeStyle, setNoticeStyle] = useState('normal');
-  const [permissionStatus, setPermissionStatus] = useState('checking');
-  const [scheduledNotifications, setScheduledNotifications] = useState([]);
-
-  useEffect(() => {
-    refreshPermissionStatus();
-    refreshScheduledNotifications();
-  }, []);
-
-  const scheduleSummary = useMemo(() => {
-    if (!isRecurring) {
-      return `One time on ${formatDateTime(scheduledAt)}`;
-    }
-
-    return `${capitalize(repeatEvery)} at ${formatTime(scheduledAt)}`;
-  }, [isRecurring, repeatEvery, scheduledAt]);
-
-  async function refreshPermissionStatus() {
-    const permissions = await Notifications.getPermissionsAsync();
-    setPermissionStatus(permissions.status);
-  }
-
-  async function requestNotificationPermission() {
-    const permissions = await Notifications.requestPermissionsAsync({
-      ios: {
-        allowAlert: true,
-        allowBadge: false,
-        allowSound: true,
-        allowDisplayInCarPlay: true,
-      },
-    });
-
-    setPermissionStatus(permissions.status);
-    return permissions.status === 'granted';
-  }
-
-  async function refreshScheduledNotifications() {
-    const requests = await Notifications.getAllScheduledNotificationsAsync();
-    const sortedRequests = [...requests].sort((a, b) =>
-      describeRequest(a).localeCompare(describeRequest(b))
-    );
-    setScheduledNotifications(sortedRequests);
-  }
-
-  async function scheduleNotification() {
-    const trimmedMessage = message.trim();
-
-    if (!trimmedMessage) {
-      Alert.alert('Message required', 'Enter the text that should appear in the notification.');
-      return;
-    }
-
-    const hasPermission =
-      permissionStatus === 'granted' || (await requestNotificationPermission());
-
-    if (!hasPermission) {
-      Alert.alert(
-        'Notifications disabled',
-        'Allow notifications for this app in iOS Settings, then try again.'
-      );
-      return;
-    }
-
-    const trigger = buildTrigger(scheduledAt, isRecurring, repeatEvery);
-
-    if (!isRecurring && scheduledAt.getTime() <= Date.now()) {
-      Alert.alert('Choose a future time', 'One-time notifications must be scheduled in the future.');
-      return;
-    }
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: noticeStyle === 'alarm' ? 'Alarm Reminder' : 'Reminder',
-        body: trimmedMessage,
-        sound: true,
-        interruptionLevel: noticeStyle === 'alarm' ? 'timeSensitive' : 'active',
-        data: {
-          noticeStyle,
-          repeatEvery: isRecurring ? repeatEvery : 'once',
-          scheduledAt: scheduledAt.toISOString(),
-        },
-      },
-      trigger,
-    });
-
-    setMessage(defaultMessage);
-    await refreshScheduledNotifications();
-
-    Alert.alert('Notification scheduled', scheduleSummary);
-  }
-
-  async function cancelNotification(identifier) {
-    await Notifications.cancelScheduledNotificationAsync(identifier);
-    await refreshScheduledNotifications();
-  }
-
-  async function cancelAllNotifications() {
-    if (scheduledNotifications.length === 0) {
-      return;
-    }
-
-    await Notifications.cancelAllScheduledNotificationsAsync();
-    await refreshScheduledNotifications();
-  }
-
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardView}
-      >
-        <FlatList
-          contentContainerStyle={styles.content}
-          data={scheduledNotifications}
-          keyExtractor={(item) => item.identifier}
-          keyboardShouldPersistTaps="handled"
-          ListHeaderComponent={
-            <View>
-              <View style={styles.header}>
-                <Text style={styles.title}>Notification Scheduler</Text>
-                <Text style={styles.subtitle}>Create local iOS reminders with custom timing.</Text>
-              </View>
-
-              <View style={styles.section}>
-                <View style={styles.rowBetween}>
-                  <View>
-                    <Text style={styles.label}>Notification access</Text>
-                    <Text style={styles.hint}>{formatPermission(permissionStatus)}</Text>
-                  </View>
-                  <Pressable style={styles.secondaryButton} onPress={requestNotificationPermission}>
-                    <Text style={styles.secondaryButtonText}>Allow</Text>
-                  </Pressable>
-                </View>
-              </View>
-
-              <View style={styles.section}>
-                <Text style={styles.label}>Message</Text>
-                <TextInput
-                  multiline
-                  onChangeText={setMessage}
-                  placeholder="Type the notification message"
-                  placeholderTextColor="#8A94A6"
-                  style={styles.messageInput}
-                  value={message}
-                />
-
-                <Text style={styles.label}>Notice style</Text>
-                <View style={styles.noticeOptions}>
-                  {noticeOptions.map((option) => {
-                    const selected = noticeStyle === option.value;
-                    return (
-                      <Pressable
-                        key={option.value}
-                        onPress={() => setNoticeStyle(option.value)}
-                        style={[styles.noticeOption, selected && styles.noticeOptionSelected]}
-                      >
-                        <View style={styles.noticeOptionHeader}>
-                          <View style={[styles.radio, selected && styles.radioSelected]}>
-                            {selected ? <View style={styles.radioDot} /> : null}
-                          </View>
-                          <Text
-                            style={[
-                              styles.noticeOptionTitle,
-                              selected && styles.noticeOptionTitleSelected,
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </View>
-                        <Text style={styles.noticeOptionDescription}>{option.description}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                <Text style={styles.label}>Date</Text>
-                <View style={styles.pickerFrame}>
-                  <DateTimePicker
-                    display="inline"
-                    mode="date"
-                    onChange={(event, selectedDate) => {
-                      if (selectedDate) {
-                        setScheduledAt(mergeDateAndTime(selectedDate, scheduledAt));
-                      }
-                    }}
-                    value={scheduledAt}
-                  />
-                </View>
-
-                <Text style={styles.label}>Time</Text>
-                <View style={styles.pickerFrame}>
-                  <DateTimePicker
-                    display="spinner"
-                    mode="time"
-                    onChange={(event, selectedDate) => {
-                      if (selectedDate) {
-                        setScheduledAt(mergeDateAndTime(scheduledAt, selectedDate));
-                      }
-                    }}
-                    value={scheduledAt}
-                  />
-                </View>
-
-                <View style={styles.repeatHeader}>
-                  <View>
-                    <Text style={styles.label}>Recurring</Text>
-                    <Text style={styles.hint}>{scheduleSummary}</Text>
-                  </View>
-                  <Switch onValueChange={setIsRecurring} value={isRecurring} />
-                </View>
-
-                {isRecurring ? (
-                  <View style={styles.segmentedControl}>
-                    {repeatOptions.map((option) => {
-                      const selected = repeatEvery === option.value;
-                      return (
-                        <Pressable
-                          key={option.value}
-                          onPress={() => setRepeatEvery(option.value)}
-                          style={[styles.segment, selected && styles.segmentSelected]}
-                        >
-                          <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>
-                            {option.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                ) : null}
-
-                <Pressable style={styles.primaryButton} onPress={scheduleNotification}>
-                  <Text style={styles.primaryButtonText}>Schedule Notification</Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.listTitleRow}>
-                <Text style={styles.listTitle}>Scheduled</Text>
-                <Pressable
-                  disabled={scheduledNotifications.length === 0}
-                  onPress={cancelAllNotifications}
-                  style={({ pressed }) => [
-                    styles.clearButton,
-                    scheduledNotifications.length === 0 && styles.disabledButton,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={styles.clearButtonText}>Clear all</Text>
-                </Pressable>
-              </View>
-            </View>
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No notifications yet</Text>
-              <Text style={styles.emptyText}>Create one above and iOS will deliver it locally.</Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <View style={styles.notificationItem}>
-              <View style={styles.notificationCopy}>
-                <Text style={styles.notificationMessage}>{item.content.body}</Text>
-                <Text style={styles.notificationMeta}>{describeRequest(item)}</Text>
-              </View>
-              <Pressable
-                onPress={() => cancelNotification(item.identifier)}
-                style={({ pressed }) => [styles.cancelButton, pressed && styles.pressed]}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </Pressable>
-            </View>
-          )}
-        />
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+  const [screen, setScreen] = useState('home');
+  const open = (next) => setScreen(next);
+  return <SafeAreaView style={styles.safe}><StatusBar style="dark" />{screen === 'home' ? <Dashboard onOpen={open} /> : <ToolFrame title={tools.find((tool) => tool.id === screen)?.title} onBack={() => setScreen('home')}><Tool screen={screen} /></ToolFrame>}</SafeAreaView>;
 }
 
-function buildTrigger(date, isRecurring, repeatEvery) {
-  if (!isRecurring) {
-    return {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date,
-    };
-  }
-
-  const hour = date.getHours();
-  const minute = date.getMinutes();
-
-  if (repeatEvery === 'weekly') {
-    return {
-      type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-      weekday: date.getDay() + 1,
-      hour,
-      minute,
-    };
-  }
-
-  if (repeatEvery === 'monthly') {
-    return {
-      type: Notifications.SchedulableTriggerInputTypes.MONTHLY,
-      day: date.getDate(),
-      hour,
-      minute,
-    };
-  }
-
-  if (repeatEvery === 'yearly') {
-    return {
-      type: Notifications.SchedulableTriggerInputTypes.YEARLY,
-      month: date.getMonth() + 1,
-      day: date.getDate(),
-      hour,
-      minute,
-    };
-  }
-
-  return {
-    type: Notifications.SchedulableTriggerInputTypes.DAILY,
-    hour,
-    minute,
-  };
+function Dashboard({ onOpen }) {
+  return <ScrollView contentContainerStyle={styles.content}><View style={styles.header}><Text style={styles.kicker}>PERSONAL TOOLBOX</Text><Text style={styles.title}>Small tools, ready when you are.</Text><Text style={styles.subtitle}>Everything stays on this device unless you choose to call an API.</Text></View><View style={styles.toolGrid}>{tools.map((tool) => <Pressable key={tool.id} onPress={() => onOpen(tool.id)} style={({ pressed }) => [styles.toolCard, pressed && styles.pressed]}><View style={styles.icon}><Text style={styles.iconText}>{tool.icon}</Text></View><Text style={styles.cardTitle}>{tool.title}</Text><Text style={styles.cardDescription}>{tool.description}</Text><Text style={styles.chevron}>›</Text></Pressable>)}</View><Text style={styles.footerNote}>Local-first • iOS ready</Text></ScrollView>;
 }
 
-function getDefaultDate() {
-  const date = new Date();
-  date.setMinutes(date.getMinutes() + 5);
-  date.setSeconds(0);
-  date.setMilliseconds(0);
-  return date;
+function ToolFrame({ title, onBack, children }) { return <View style={styles.flex}><View style={styles.nav}><Pressable onPress={onBack} style={styles.back}><Text style={styles.backText}>‹</Text></Pressable><Text style={styles.navTitle}>{title}</Text></View>{children}</View>; }
+function Tool({ screen }) { if (screen === 'reminders') return <ReminderTool />; if (screen === 'last') return <LastTimeTool />; if (screen === 'countdown') return <CountdownTool />; if (screen === 'groceries') return <GroceryTool />; return <ApiTool />; }
+
+function ReminderTool() {
+  const [message, setMessage] = useState('This is a message created by the user'); const [at, setAt] = useState(defaultDate()); const [recurring, setRecurring] = useState(false); const [repeat, setRepeat] = useState('daily'); const [style, setStyle] = useState('normal'); const [permission, setPermission] = useState('checking'); const [items, setItems] = useState([]);
+  useEffect(() => { Notifications.getPermissionsAsync().then((p) => setPermission(p.status)); refresh(); }, []);
+  async function refresh() { const list = await Notifications.getAllScheduledNotificationsAsync(); setItems(list.sort((a, b) => describeRequest(a).localeCompare(describeRequest(b)))); }
+  async function allow() { const p = await Notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowBadge: false, allowSound: true, allowDisplayInCarPlay: true } }); setPermission(p.status); return p.status === 'granted'; }
+  async function schedule() { const text = message.trim(); if (!text) return Alert.alert('Message required', 'Enter a message.'); if (!recurring && at <= new Date()) return Alert.alert('Choose a future time', 'One-time reminders must be in the future.'); if (permission !== 'granted' && !(await allow())) return Alert.alert('Notifications disabled', 'Allow notifications in iOS Settings.'); await Notifications.scheduleNotificationAsync({ content: { title: style === 'alarm' ? 'Alarm Reminder' : 'Reminder', body: text, sound: true, interruptionLevel: style === 'alarm' ? 'timeSensitive' : 'active', data: { style, repeat, at: at.toISOString() } }, trigger: triggerFor(at, recurring, repeat) }); await refresh(); Alert.alert('Scheduled', recurring ? `${cap(repeat)} at ${time(at)}` : dateTime(at)); }
+  return <ScrollView contentContainerStyle={styles.content}><Text style={styles.sectionLabel}>Notification access</Text><View style={styles.inline}><Text style={styles.muted}>{permission === 'granted' ? 'Allowed' : permission === 'denied' ? 'Denied in Settings' : 'Not requested'}</Text><Button small text="Allow" onPress={allow} /></View><Panel><Text style={styles.label}>Message</Text><TextInput multiline value={message} onChangeText={setMessage} style={styles.inputTall} placeholder="Notification message" placeholderTextColor="#98A2B3" /><Text style={styles.label}>Notice style</Text><View style={styles.row}>{['normal', 'alarm'].map((value) => <Choice key={value} selected={style === value} title={value === 'alarm' ? 'Alarm-like' : 'Normal'} onPress={() => setStyle(value)} />)}</View><Text style={styles.label}>Date</Text><DateTimePicker display="inline" mode="date" value={at} onChange={(_, d) => d && setAt(merge(d, at))} /><Text style={styles.label}>Time</Text><DateTimePicker display="spinner" mode="time" value={at} onChange={(_, d) => d && setAt(merge(at, d))} /><View style={styles.inline}><View><Text style={styles.label}>Recurring</Text><Text style={styles.muted}>{recurring ? `${cap(repeat)} at ${time(at)}` : `One time on ${dateTime(at)}`}</Text></View><Switch value={recurring} onValueChange={setRecurring} /></View>{recurring && <View style={styles.segment}>{repeatOptions.map((o) => <Pressable key={o.value} onPress={() => setRepeat(o.value)} style={[styles.segmentItem, repeat === o.value && styles.segmentSelected]}><Text style={repeat === o.value ? styles.segmentTextSelected : styles.segmentText}>{o.label}</Text></Pressable>)}</View>}<Button text="Schedule notification" onPress={schedule} /></Panel><ListHeading title="Scheduled" onClear={async () => { await Notifications.cancelAllScheduledNotificationsAsync(); refresh(); }} /><FlatList scrollEnabled={false} data={items} keyExtractor={(x) => x.identifier} ListEmptyComponent={<Empty text="No notifications yet." />} renderItem={({ item }) => <Item title={item.content.body} meta={describeRequest(item)} action="Cancel" onAction={async () => { await Notifications.cancelScheduledNotificationAsync(item.identifier); refresh(); }} />} /></ScrollView>;
 }
 
-function mergeDateAndTime(dateSource, timeSource) {
-  const merged = new Date(dateSource);
-  merged.setHours(timeSource.getHours());
-  merged.setMinutes(timeSource.getMinutes());
-  merged.setSeconds(0);
-  merged.setMilliseconds(0);
-  return merged;
+function LastTimeTool() {
+  const [items, setItems] = useStored(KEYS.last, []); const [name, setName] = useState(''); const [editing, setEditing] = useState(null); const [sort, setSort] = useState('oldest'); const [date, setDate] = useState(new Date());
+  const save = () => { if (!name.trim()) return; const item = { id: editing?.id || id(), name: name.trim(), completedAt: (editing ? date : new Date()).toISOString() }; setItems((current) => editing ? current.map((x) => x.id === editing.id ? item : x) : [item, ...current]); setName(''); setEditing(null); };
+  const ordered = [...items].sort((a, b) => sort === 'recent' ? new Date(b.completedAt) - new Date(a.completedAt) : new Date(a.completedAt) - new Date(b.completedAt));
+  return <ScrollView contentContainerStyle={styles.content}><Panel><Text style={styles.label}>{editing ? 'Edit item' : 'Add item'}</Text><TextInput value={name} onChangeText={setName} style={styles.input} placeholder="e.g. Changed bedsheets" placeholderTextColor="#98A2B3" />{editing && <><Text style={styles.label}>Last completed</Text><DateTimePicker mode="datetime" value={date} onChange={(_, d) => d && setDate(d)} /></>}<Button text={editing ? 'Save changes' : 'Add item'} onPress={save} />{editing && <Button text="Cancel" secondary onPress={() => { setEditing(null); setName(''); }} />}</Panel><View style={styles.inline}><Text style={styles.sectionTitle}>Tracked items</Text><View style={styles.row}><Choice selected={sort === 'oldest'} title="Longest ago" onPress={() => setSort('oldest')} /><Choice selected={sort === 'recent'} title="Recent" onPress={() => setSort('recent')} /></View></View>{ordered.length ? ordered.map((item) => <Item key={item.id} title={item.name} meta={`${relative(item.completedAt)} • ${dateTime(new Date(item.completedAt))}`} action="Done now" onAction={() => setItems((x) => x.map((v) => v.id === item.id ? { ...v, completedAt: new Date().toISOString() } : v))} secondAction="Edit" onSecond={() => { setEditing(item); setName(item.name); setDate(new Date(item.completedAt)); }} onDelete={() => setItems((x) => x.filter((v) => v.id !== item.id))} />) : <Empty text="Add the things you want to remember." />}</ScrollView>;
 }
 
-function formatDateTime(date) {
-  return `${date.toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })} at ${formatTime(date)}`;
+function CountdownTool() {
+  const [items, setItems] = useStored(KEYS.countdown, []); const [title, setTitle] = useState(''); const [target, setTarget] = useState(() => defaultDate()); const [editing, setEditing] = useState(null);
+  const save = () => { if (!title.trim()) return; const item = { id: editing?.id || id(), title: title.trim(), target: target.toISOString(), favorite: editing?.favorite || false }; setItems((x) => editing ? x.map((v) => v.id === editing.id ? item : v) : [...x, item]); setTitle(''); setEditing(null); };
+  return <ScrollView contentContainerStyle={styles.content}><Panel><Text style={styles.label}>{editing ? 'Edit countdown' : 'New countdown'}</Text><TextInput value={title} onChangeText={setTitle} style={styles.input} placeholder="e.g. Vacation" placeholderTextColor="#98A2B3" /><DateTimePicker mode="datetime" value={target} onChange={(_, d) => d && setTarget(d)} /><Button text={editing ? 'Save changes' : 'Add countdown'} onPress={save} /></Panel><Text style={styles.sectionTitle}>Your countdowns</Text>{items.length ? items.sort((a, b) => Number(b.favorite) - Number(a.favorite)).map((item) => <CountdownCard key={item.id} item={item} onFavorite={() => setItems((x) => x.map((v) => v.id === item.id ? { ...v, favorite: !v.favorite } : v))} onEdit={() => { setEditing(item); setTitle(item.title); setTarget(new Date(item.target)); }} onDelete={() => setItems((x) => x.filter((v) => v.id !== item.id))} />) : <Empty text="Add an event to start counting down." />}<Text style={styles.note}>WidgetKit note: a home-screen widget requires an iOS development build with a WidgetKit extension and App Group shared storage. The app data model is ready for that native extension; Expo Go cannot load WidgetKit extensions.</Text></ScrollView>;
+}
+function CountdownCard({ item, onFavorite, onEdit, onDelete }) { const remaining = countdown(item.target); return <View style={styles.card}><View style={styles.inline}><View style={styles.flex}><Text style={styles.cardTitle}>{item.title}</Text><Text style={styles.bigNumber}>{remaining.done ? 'Past' : `${remaining.days}d ${remaining.hours}h ${remaining.minutes}m`}</Text><Text style={styles.muted}>{dateTime(new Date(item.target))}</Text></View><Pressable onPress={onFavorite}><Text style={styles.star}>{item.favorite ? '★' : '☆'}</Text></Pressable></View><View style={styles.actions}><Button small secondary text="Edit" onPress={onEdit} /><Button small danger text="Delete" onPress={onDelete} /></View></View>; }
+
+function GroceryTool() {
+  const [data, setData] = useStored(KEYS.groceries, { activeDate: today(), lists: {} }); const [input, setInput] = useState(''); const [history, setHistory] = useState(false); const active = ensureToday(data); const list = active.lists[active.activeDate] || []; const suggestions = input.length > 1 ? groceryNames(data).filter((x) => x.toLowerCase().startsWith(input.toLowerCase())).slice(0, 4) : [];
+  useEffect(() => { if (active !== data) setData(active); }, [data.activeDate]);
+  const update = (next) => setData({ ...active, lists: { ...active.lists, [active.activeDate]: next } }); const add = (value = input) => { if (!value.trim()) return; update([...list, { id: id(), name: value.trim(), done: false }]); setInput(''); }; const edit = (item) => Alert.prompt('Edit item', undefined, (value) => value?.trim() && update(list.map((x) => x.id === item.id ? { ...x, name: value.trim() } : x)), 'plain-text', item.name);
+  return <ScrollView contentContainerStyle={styles.content}><View style={styles.inline}><View><Text style={styles.sectionTitle}>{history ? 'Grocery history' : 'Today\'s groceries'}</Text><Text style={styles.muted}>{active.activeDate}</Text></View><Button small secondary text={history ? 'Today' : 'History'} onPress={() => setHistory(!history)} /></View>{history ? <History data={active} onCopy={(old) => { update([...list, ...old.map((x) => ({ ...x, id: id() }))]); setHistory(false); }} /> : <><View style={styles.addRow}><TextInput value={input} onChangeText={setInput} onSubmitEditing={() => add()} style={[styles.input, styles.flex]} placeholder="Add grocery item" placeholderTextColor="#98A2B3" /><Button small text="Add" onPress={() => add()} /></View>{suggestions.map((x) => <Pressable key={x} onPress={() => add(x)} style={styles.suggestion}><Text>{x}</Text></Pressable>)}{list.map((item) => <View key={item.id} style={styles.groceryRow}><Pressable onPress={() => update(list.map((x) => x.id === item.id ? { ...x, done: !x.done } : x))} style={[styles.checkbox, item.done && styles.checkboxDone]}><Text>{item.done ? '✓' : ''}</Text></Pressable><Text style={[styles.groceryName, item.done && styles.done]}>{item.name}</Text><Pressable onPress={() => edit(item)}><Text style={styles.link}>Edit</Text></Pressable><Pressable onPress={() => update(list.filter((x) => x.id !== item.id))}><Text style={styles.deleteText}>×</Text></Pressable></View>)}</>}</ScrollView>;
+}
+function History({ data, onCopy }) { const [query, setQuery] = useState(''); const days = Object.keys(data.lists).filter((x) => x !== data.activeDate).sort().reverse(); return <><TextInput value={query} onChangeText={setQuery} style={styles.input} placeholder="Search old items" placeholderTextColor="#98A2B3" />{days.map((day) => { const items = data.lists[day].filter((x) => !query || x.name.toLowerCase().includes(query.toLowerCase())); return items.length ? <View key={day} style={styles.card}><Text style={styles.cardTitle}>{day}</Text>{items.map((x) => <Text key={x.id} style={styles.historyItem}>{x.done ? '✓ ' : '• '}{x.name}</Text>)}<Button small secondary text="Copy all to today" onPress={() => onCopy(data.lists[day])} /></View> : null; })}</>; }
+
+function ApiTool() {
+  const [actions, setActions] = useStored(KEYS.api, []); const [editing, setEditing] = useState(null); const blank = { name: '', description: '', url: '', method: 'GET', headers: '', body: '', contentType: 'application/json', timeout: '15000' }; const [form, setForm] = useState(blank); const [result, setResult] = useState(null); const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+  const save = () => { if (!form.name.trim() || !form.url.trim()) return Alert.alert('Name and URL required'); const value = { ...form, id: editing?.id || id() }; setActions((x) => editing ? x.map((a) => a.id === editing.id ? value : a) : [...x, value]); setForm(blank); setEditing(null); }; async function run(action) { setResult({ id: action.id, loading: true }); const started = Date.now(); try { const headers = await resolveHeaders(action.headers); const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), Number(action.timeout) || 15000); const response = await fetch(action.url, { method: action.method, headers, body: ['GET', 'DELETE'].includes(action.method) ? undefined : action.body || undefined, signal: controller.signal }); clearTimeout(timer); const text = await response.text(); let body; try { body = JSON.stringify(JSON.parse(text), null, 2); } catch { body = text; } setResult({ id: action.id, status: response.status, ms: Date.now() - started, body }); } catch (error) { setResult({ id: action.id, error: error.message }); } }
+  return <ScrollView contentContainerStyle={styles.content}><Panel><Text style={styles.label}>{editing ? 'Edit API action' : 'New API action'}</Text><TextInput value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} style={styles.input} placeholder="Name" placeholderTextColor="#98A2B3" /><TextInput value={form.description} onChangeText={(v) => setForm({ ...form, description: v })} style={styles.input} placeholder="Description (optional)" placeholderTextColor="#98A2B3" /><TextInput autoCapitalize="none" value={form.url} onChangeText={(v) => setForm({ ...form, url: v })} style={styles.input} placeholder="https://example.com/health" placeholderTextColor="#98A2B3" /><View style={styles.segment}>{methods.map((m) => <Pressable key={m} onPress={() => setForm({ ...form, method: m })} style={[styles.segmentItem, form.method === m && styles.segmentSelected]}><Text style={form.method === m ? styles.segmentTextSelected : styles.segmentText}>{m}</Text></Pressable>)}</View><TextInput autoCapitalize="none" value={form.headers} onChangeText={(v) => setForm({ ...form, headers: v })} style={styles.inputTall} placeholder={'Headers, one per line\nAuthorization: Bearer {{SERVER_TOKEN}}'} placeholderTextColor="#98A2B3" /><TextInput autoCapitalize="none" value={form.body} onChangeText={(v) => setForm({ ...form, body: v })} style={styles.inputTall} placeholder="Request body (optional)" placeholderTextColor="#98A2B3" /><TextInput keyboardType="numeric" value={form.timeout} onChangeText={(v) => setForm({ ...form, timeout: v })} style={styles.input} placeholder="Timeout in ms" placeholderTextColor="#98A2B3" /><Button text="Save action" onPress={save} /></Panel><Text style={styles.note}>Use {'{{NAME}}'} in headers for a Keychain secret. Save secrets with the button below; they are never stored in normal app storage.</Text><Button secondary text="Save a Keychain secret" onPress={() => Alert.prompt('Secret name', 'Example: SERVER_TOKEN', async (key) => { if (key?.trim()) Alert.prompt('Secret value', undefined, async (value) => { if (value != null) { await SecureStore.setItemAsync(key.trim(), value); Alert.alert('Saved securely'); } }, 'secure-text'); })} />{actions.map((action) => <View key={action.id} style={styles.card}><Text style={styles.cardTitle}>{action.name}</Text>{action.description ? <Text style={styles.muted}>{action.description}</Text> : null}<Text style={styles.mono}>{action.method} {action.url}</Text><View style={styles.actions}><Button small text="Run" onPress={() => run(action)} /><Button small secondary text="Edit" onPress={() => { setEditing(action); setForm(action); }} /><Button small danger text="Delete" onPress={() => setActions((x) => x.filter((a) => a.id !== action.id))} /></View>{result?.id === action.id && <View style={styles.result}>{result.loading ? <Text>Running...</Text> : result.error ? <Text style={styles.error}>{result.error}</Text> : <Text style={styles.mono}>{result.status} - {result.ms} ms{`\n`}{result.body}</Text>}</View>}</View>)}</ScrollView>;
 }
 
-function formatTime(date) {
-  return date.toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
+function Panel({ children }) { return <View style={styles.panel}>{children}</View>; } function Button({ text, onPress, secondary, danger, small }) { return <Pressable onPress={onPress} style={[styles.button, small && styles.buttonSmall, secondary && styles.buttonSecondary, danger && styles.buttonDanger]}><Text style={[styles.buttonText, secondary && styles.buttonSecondaryText, danger && styles.buttonDangerText]}>{text}</Text></Pressable>; } function Choice({ selected, title, onPress }) { return <Pressable onPress={onPress} style={[styles.choice, selected && styles.choiceSelected]}><Text style={selected ? styles.choiceTextSelected : styles.choiceText}>{title}</Text></Pressable>; } function Item({ title, meta, action, onAction, secondAction, onSecond, onDelete }) { return <View style={styles.card}><Text style={styles.cardTitle}>{title}</Text><Text style={styles.muted}>{meta}</Text><View style={styles.actions}><Button small text={action} onPress={onAction} />{secondAction && <Button small secondary text={secondAction} onPress={onSecond} />}{onDelete && <Button small danger text="Delete" onPress={onDelete} />}</View></View>; } function ListHeading({ title, onClear }) { return <View style={styles.inline}><Text style={styles.sectionTitle}>{title}</Text><Button small danger text="Clear all" onPress={onClear} /></View>; } function Empty({ text }) { return <View style={styles.empty}><Text style={styles.muted}>{text}</Text></View>; }
 
-function describeRequest(request) {
-  const repeatEvery = request.content?.data?.repeatEvery;
-  const scheduledAt = request.content?.data?.scheduledAt;
-  const noticeStyle = request.content?.data?.noticeStyle;
-  const prefix = noticeStyle === 'alarm' ? 'Alarm-like, ' : '';
+function useStored(key, initial) { const [value, setValue] = useState(initial); useEffect(() => { AsyncStorage.getItem(key).then((raw) => raw && setValue(JSON.parse(raw))).catch(() => {}); }, [key]); const update = (next) => { setValue((current) => { const resolved = typeof next === 'function' ? next(current) : next; AsyncStorage.setItem(key, JSON.stringify(resolved)).catch(() => {}); return resolved; }); }; return [value, update]; }
+async function resolveHeaders(raw) { const headers = {}; for (const line of raw.split('\n')) { const index = line.indexOf(':'); if (index < 1) continue; let value = line.slice(index + 1).trim(); const matches = [...value.matchAll(/\{\{([^}]+)\}\}/g)]; for (const match of matches) value = value.replace(match[0], (await SecureStore.getItemAsync(match[1])) || ''); headers[line.slice(0, index).trim()] = value; } return headers; }
+function ensureToday(data) { const now = today(); return data.activeDate === now ? data : { activeDate: now, lists: { ...data.lists, [now]: [] } }; } function groceryNames(data) { return [...new Set(Object.values(data.lists).flat().map((x) => x.name))]; } function defaultDate() { const d = new Date(); d.setMinutes(d.getMinutes() + 5); d.setSeconds(0, 0); return d; } function merge(a, b) { const d = new Date(a); d.setHours(b.getHours(), b.getMinutes(), 0, 0); return d; } function today() { return new Date().toLocaleDateString('en-CA'); } function id() { return `${Date.now()}-${Math.random().toString(16).slice(2)}`; } function time(d) { return new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } function dateTime(d) { return `${new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} at ${time(d)}`; } function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); } function relative(value) { const days = Math.max(0, Math.floor((Date.now() - new Date(value)) / 86400000)); if (days < 1) return 'Today'; if (days === 1) return '1 day ago'; if (days < 14) return `${days} days ago`; const weeks = Math.floor(days / 7); if (weeks < 8) return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`; const months = Math.floor(days / 30); return `${months} ${months === 1 ? 'month' : 'months'} ago`; } function countdown(value) { const diff = new Date(value) - new Date(); if (diff <= 0) return { done: true }; return { days: Math.floor(diff / 86400000), hours: Math.floor(diff / 3600000) % 24, minutes: Math.floor(diff / 60000) % 60 }; } function triggerFor(d, recurring, repeat) { if (!recurring) return { type: Notifications.SchedulableTriggerInputTypes.DATE, date: d }; const base = { hour: d.getHours(), minute: d.getMinutes() }; if (repeat === 'weekly') return { type: Notifications.SchedulableTriggerInputTypes.WEEKLY, weekday: d.getDay() + 1, ...base }; if (repeat === 'monthly') return { type: Notifications.SchedulableTriggerInputTypes.MONTHLY, day: d.getDate(), ...base }; if (repeat === 'yearly') return { type: Notifications.SchedulableTriggerInputTypes.YEARLY, month: d.getMonth() + 1, day: d.getDate(), ...base }; return { type: Notifications.SchedulableTriggerInputTypes.DAILY, ...base }; } function describeRequest(r) { const d = r.content?.data || {}; const prefix = d.style === 'alarm' ? 'Alarm-like • ' : ''; return d.repeat && d.repeat !== 'daily' && d.repeat !== 'once' ? `${prefix}${cap(d.repeat)} at ${time(d.at)}` : `${prefix}${d.at ? dateTime(d.at) : 'Scheduled notification'}`; }
 
-  if (repeatEvery && repeatEvery !== 'once') {
-    const date = scheduledAt ? new Date(scheduledAt) : null;
-    return `${prefix}${capitalize(repeatEvery)}${date ? ` at ${formatTime(date)}` : ''}`;
-  }
-
-  if (scheduledAt) {
-    return `${prefix}One time on ${formatDateTime(new Date(scheduledAt))}`;
-  }
-
-  return 'Scheduled notification';
-}
-
-function formatPermission(status) {
-  if (status === 'granted') {
-    return 'Allowed';
-  }
-
-  if (status === 'denied') {
-    return 'Denied in iOS Settings';
-  }
-
-  if (status === 'checking') {
-    return 'Checking';
-  }
-
-  return 'Not requested';
-}
-
-function capitalize(value) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#F5F7FB',
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  header: {
-    paddingBottom: 18,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 30,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: '#5B6472',
-    fontSize: 16,
-    lineHeight: 22,
-    marginTop: 8,
-  },
-  section: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 16,
-    padding: 16,
-  },
-  rowBetween: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  label: {
-    color: '#1F2937',
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  hint: {
-    color: '#667085',
-    fontSize: 14,
-    lineHeight: 19,
-  },
-  messageInput: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#D7DEE8',
-    borderRadius: 8,
-    borderWidth: 1,
-    color: '#111827',
-    fontSize: 16,
-    minHeight: 96,
-    padding: 12,
-    textAlignVertical: 'top',
-    marginBottom: 18,
-  },
-  noticeOptions: {
-    gap: 10,
-    marginBottom: 18,
-  },
-  noticeOption: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#D7DEE8',
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 12,
-  },
-  noticeOptionSelected: {
-    backgroundColor: '#EEF6FF',
-    borderColor: '#1677FF',
-  },
-  noticeOptionHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 5,
-  },
-  noticeOptionTitle: {
-    color: '#344054',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  noticeOptionTitleSelected: {
-    color: '#0F4C9E',
-  },
-  noticeOptionDescription: {
-    color: '#667085',
-    fontSize: 13,
-    lineHeight: 18,
-    paddingLeft: 30,
-  },
-  radio: {
-    alignItems: 'center',
-    borderColor: '#98A2B3',
-    borderRadius: 10,
-    borderWidth: 2,
-    height: 20,
-    justifyContent: 'center',
-    width: 20,
-  },
-  radioSelected: {
-    borderColor: '#1677FF',
-  },
-  radioDot: {
-    backgroundColor: '#1677FF',
-    borderRadius: 5,
-    height: 10,
-    width: 10,
-  },
-  pickerFrame: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 18,
-    overflow: 'hidden',
-  },
-  repeatHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  segmentedControl: {
-    backgroundColor: '#EEF2F7',
-    borderRadius: 8,
-    flexDirection: 'row',
-    gap: 4,
-    marginBottom: 16,
-    padding: 4,
-  },
-  segment: {
-    alignItems: 'center',
-    borderRadius: 6,
-    flex: 1,
-    minHeight: 38,
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  segmentSelected: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#101828',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  segmentText: {
-    color: '#5B6472',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  segmentTextSelected: {
-    color: '#111827',
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#1677FF',
-    borderRadius: 8,
-    minHeight: 50,
-    justifyContent: 'center',
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#EEF6FF',
-    borderRadius: 8,
-    minHeight: 42,
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  secondaryButtonText: {
-    color: '#1662C4',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  listTitleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-    marginTop: 2,
-  },
-  listTitle: {
-    color: '#111827',
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  clearButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  clearButtonText: {
-    color: '#C2410C',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  disabledButton: {
-    opacity: 0.35,
-  },
-  emptyState: {
-    alignItems: 'center',
-    borderColor: '#D9E2EC',
-    borderRadius: 8,
-    borderStyle: 'dashed',
-    borderWidth: 1,
-    padding: 22,
-  },
-  emptyTitle: {
-    color: '#1F2937',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  emptyText: {
-    color: '#667085',
-    fontSize: 14,
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  notificationItem: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 10,
-    padding: 14,
-  },
-  notificationCopy: {
-    flex: 1,
-  },
-  notificationMessage: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  notificationMeta: {
-    color: '#667085',
-    fontSize: 13,
-    marginTop: 4,
-  },
-  cancelButton: {
-    backgroundColor: '#FFF1F2',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  cancelButtonText: {
-    color: '#BE123C',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  pressed: {
-    opacity: 0.75,
-  },
-});
+const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: '#F5F7FB' }, flex: { flex: 1 }, content: { padding: 20, paddingBottom: 48 }, header: { paddingBottom: 22 }, kicker: { color: '#1677FF', fontSize: 12, fontWeight: '800', letterSpacing: 1.2, marginBottom: 10 }, title: { color: '#111827', fontSize: 30, fontWeight: '800', lineHeight: 36 }, subtitle: { color: '#667085', fontSize: 16, lineHeight: 22, marginTop: 10 }, toolGrid: { gap: 12 }, toolCard: { backgroundColor: '#FFF', borderColor: '#E2E8F0', borderRadius: 8, borderWidth: 1, minHeight: 116, padding: 16, position: 'relative' }, icon: { alignItems: 'center', backgroundColor: '#EEF6FF', borderRadius: 8, height: 36, justifyContent: 'center', marginBottom: 12, width: 42 }, iconText: { color: '#1677FF', fontSize: 18, fontWeight: '800' }, cardTitle: { color: '#111827', fontSize: 17, fontWeight: '800' }, cardDescription: { color: '#667085', fontSize: 14, marginTop: 5 }, chevron: { color: '#98A2B3', fontSize: 30, position: 'absolute', right: 17, top: 43 }, footerNote: { color: '#98A2B3', fontSize: 13, marginTop: 24, textAlign: 'center' }, nav: { alignItems: 'center', borderBottomColor: '#E2E8F0', borderBottomWidth: 1, flexDirection: 'row', minHeight: 58, paddingHorizontal: 14 }, back: { height: 40, justifyContent: 'center', width: 40 }, backText: { color: '#1677FF', fontSize: 38, fontWeight: '300', lineHeight: 40 }, navTitle: { color: '#111827', fontSize: 18, fontWeight: '800' }, panel: { backgroundColor: '#FFF', borderColor: '#E2E8F0', borderRadius: 8, borderWidth: 1, marginBottom: 18, padding: 16 }, sectionLabel: { color: '#344054', fontSize: 14, fontWeight: '800', marginBottom: 8 }, sectionTitle: { color: '#111827', fontSize: 20, fontWeight: '800', marginVertical: 12 }, label: { color: '#344054', fontSize: 14, fontWeight: '800', marginBottom: 8, marginTop: 10 }, muted: { color: '#667085', fontSize: 14, lineHeight: 20 }, inline: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 }, row: { flexDirection: 'row', gap: 8 }, input: { backgroundColor: '#F8FAFC', borderColor: '#D7DEE8', borderRadius: 8, borderWidth: 1, color: '#111827', fontSize: 16, minHeight: 46, marginBottom: 12, paddingHorizontal: 12 }, inputTall: { backgroundColor: '#F8FAFC', borderColor: '#D7DEE8', borderRadius: 8, borderWidth: 1, color: '#111827', fontSize: 16, minHeight: 82, marginBottom: 12, padding: 12, textAlignVertical: 'top' }, button: { alignItems: 'center', backgroundColor: '#1677FF', borderRadius: 8, justifyContent: 'center', minHeight: 48, marginTop: 8, paddingHorizontal: 16 }, buttonSmall: { minHeight: 36, marginTop: 0, paddingHorizontal: 12 }, buttonSecondary: { backgroundColor: '#EEF6FF' }, buttonDanger: { backgroundColor: '#FFF1F2' }, buttonText: { color: '#FFF', fontSize: 14, fontWeight: '800' }, buttonSecondaryText: { color: '#1662C4' }, buttonDangerText: { color: '#BE123C' }, choice: { alignItems: 'center', borderColor: '#D7DEE8', borderRadius: 8, borderWidth: 1, minHeight: 38, justifyContent: 'center', paddingHorizontal: 12 }, choiceSelected: { backgroundColor: '#EEF6FF', borderColor: '#1677FF' }, choiceText: { color: '#667085', fontSize: 13, fontWeight: '700' }, choiceTextSelected: { color: '#1662C4', fontSize: 13, fontWeight: '800' }, segment: { backgroundColor: '#EEF2F7', borderRadius: 8, flexDirection: 'row', gap: 4, marginVertical: 12, padding: 4 }, segmentItem: { alignItems: 'center', borderRadius: 6, flex: 1, justifyContent: 'center', minHeight: 36 }, segmentSelected: { backgroundColor: '#FFF' }, segmentText: { color: '#667085', fontSize: 12, fontWeight: '700' }, segmentTextSelected: { color: '#111827', fontSize: 12, fontWeight: '800' }, card: { backgroundColor: '#FFF', borderColor: '#E2E8F0', borderRadius: 8, borderWidth: 1, marginBottom: 10, padding: 14 }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }, bigNumber: { color: '#1677FF', fontSize: 25, fontWeight: '800', marginVertical: 6 }, star: { color: '#F59E0B', fontSize: 30 }, note: { color: '#667085', fontSize: 13, lineHeight: 19, marginBottom: 14, marginTop: 4 }, mono: { color: '#344054', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12, lineHeight: 18, marginTop: 8 }, result: { backgroundColor: '#F8FAFC', borderRadius: 8, marginTop: 12, padding: 12 }, error: { color: '#BE123C' }, addRow: { alignItems: 'center', flexDirection: 'row', gap: 8 }, suggestion: { backgroundColor: '#EEF6FF', borderRadius: 6, marginBottom: 4, padding: 10 }, groceryRow: { alignItems: 'center', backgroundColor: '#FFF', borderBottomColor: '#E2E8F0', borderBottomWidth: 1, flexDirection: 'row', gap: 10, minHeight: 52, paddingHorizontal: 10 }, checkbox: { alignItems: 'center', borderColor: '#98A2B3', borderRadius: 5, borderWidth: 1, height: 22, justifyContent: 'center', width: 22 }, checkboxDone: { backgroundColor: '#D1FAE5', borderColor: '#059669' }, groceryName: { color: '#111827', flex: 1, fontSize: 16 }, done: { color: '#98A2B3', textDecorationLine: 'line-through' }, link: { color: '#1677FF', fontWeight: '700' }, deleteText: { color: '#BE123C', fontSize: 25 }, historyItem: { color: '#344054', fontSize: 15, marginBottom: 7 }, empty: { alignItems: 'center', borderColor: '#CBD5E1', borderRadius: 8, borderStyle: 'dashed', borderWidth: 1, padding: 22 }, pressed: { opacity: 0.75 } });

@@ -1,6 +1,12 @@
-# iOS Notification Scheduler
+# Everyday Toolbox for iOS
 
-A React Native app using Expo SDK 54 for scheduling local iOS notifications.
+Everyday Toolbox is an Expo SDK 54 React Native app containing five small local-first tools:
+
+- Reminders: one-time or recurring local iOS notifications, including a Time Sensitive alarm-like option.
+- Last Time: track when you last completed custom items, with relative dates and sorting.
+- Countdowns: favorite events and see days/hours/minutes remaining.
+- Grocery List: daily lists, automatic local-date rollover, suggestions, and history.
+- API Toolbox: save and run HTTP actions, format JSON responses, and resolve `{{SECRET_NAME}}` header values from iOS Keychain.
 
 ## Run locally
 
@@ -9,34 +15,28 @@ npm install
 npm start
 ```
 
-Scan the QR code with Expo Go on iOS. The app lets you:
+Most tools work in Expo Go. Notifications require permission on the iPhone. Data is stored locally with AsyncStorage; API secrets are stored with `expo-secure-store` and are not included in normal app storage.
 
-- enter a notification message
-- choose a date and time
-- choose normal or alarm-like notice style
-- make it one-time or recurring
-- repeat daily, weekly, monthly, or yearly
-- view and cancel scheduled notifications
+## WidgetKit
 
-Local notifications need iOS notification permission. The app asks for it when you tap Allow or schedule your first reminder.
-
-## iOS alarm behavior
-
-iOS does not allow regular apps to start the built-in Clock alarm or run an unlimited alarm sound from a scheduled notification. The app's alarm-like mode uses a Time Sensitive local notification with sound, which is the strongest generally available option without Apple's special Critical Alerts entitlement.
+The countdown data model is ready for a native iOS WidgetKit extension, but Expo Go cannot load WidgetKit extensions. A proper iOS development build must add a WidgetKit target, an App Group shared container, and a small Swift timeline provider that reads the selected countdowns from the shared container. The app should call `WidgetCenter.shared.reloadAllTimelines()` whenever countdown data changes. This requires an Apple Developer build and cannot be represented by a JavaScript-only Expo Go app.
 
 ## Build an IPA
 
-An `.ipa` needs Apple's iOS build toolchain. On Windows, use EAS Build:
+On Windows, use EAS Build with the locally installed CLI:
 
 ```powershell
-npx eas-cli login
-npx eas-cli init
+.\node_modules\.bin\eas.cmd login
 npm run ios:ipa
 ```
 
-EAS will ask for Apple Developer credentials unless you build an unsigned archive. When the build finishes, it gives you a download link for the artifact.
+The `sidestore` profile creates an unsigned Everyday Toolbox IPA for your sideloading workflow with `withoutCredentials: true`. For the WidgetKit version, use the development profile after adding the native extension and App Group configuration:
 
-For a simulator build instead:
+```powershell
+npm run ios:development
+```
+
+For an iOS simulator build:
 
 ```powershell
 npm run ios:simulator
