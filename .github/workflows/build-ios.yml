@@ -249,3 +249,84 @@ jobs:
             source.json
           if-no-files-found: error
           retention-days: 30
+
+      - name: Configure SSH
+        shell: bash
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy IPA and source.json
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+
+          APP_SLUG="$(node -p "require('./app.json').expo.slug")"
+          IPA_NAME="${APP_SLUG}.ipa"
+
+          echo "Deploying ${IPA_NAME}"
+
+          scp \
+            -i ~/.ssh/deploy_key \
+            "${IPA_NAME}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/apps/ipa/${IPA_NAME}.tmp"
+
+          scp \
+            -i ~/.ssh/deploy_key \
+            source.json \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/apps/source.json.tmp"
+
+          ssh \
+            -i ~/.ssh/deploy_key \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "
+              set -e
+
+              mv \
+                '/var/www/apps/ipa/${IPA_NAME}.tmp' \
+                '/var/www/apps/ipa/${IPA_NAME}'
+
+              mv \
+                '/var/www/apps/source.json.tmp' \
+                '/var/www/apps/source.json'
+
+              chmod 664 \
+                '/var/www/apps/ipa/${IPA_NAME}' \
+                '/var/www/apps/source.json'
+            "
+
+          echo "Deployment complete."
+
+
+      - name: Verify deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP_SLUG="$(node -p "require('./app.json').expo.slug")"
+
+          echo "Checking source.json..."
+          curl --fail --silent --show-error \
+            "https://apps.alihan.dk/source.json" \
+            > /dev/null
+
+          echo "Checking IPA..."
+          curl --fail --silent --show-error \
+            --head \
+            "https://apps.alihan.dk/ipa/${APP_SLUG}.ipa"
+
+          echo "Deployment verified."
