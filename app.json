@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Hello World",
+    "slug": "hello-world-ios",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.alioz.helloworldios"
+    },
+    "android": {
+      "package": "com.alioz.helloworldios"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f499c8e1-73a7-45bd-b5a4-9f327307f205"
+      }
+    },
+    "owner": "aliyo"
+  }
+}
