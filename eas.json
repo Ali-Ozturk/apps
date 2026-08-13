@@ -5,6 +5,7 @@
   },
   "build": {
     "sidestore": {
+      "autoIncrement": true,
       "ios": {
         "withoutCredentials": true,
         "simulator": false

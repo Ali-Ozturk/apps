@@ -7,6 +7,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-ios:
     name: Build iOS IPA
@@ -16,6 +23,35 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Increment iOS build number
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'app.json';
+          const config = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const current = Number(config.expo.ios.buildNumber);
+
+          if (!Number.isInteger(current) || current < 1) {
+            throw new Error(`Invalid iOS buildNumber: ${config.expo.ios.buildNumber}`);
+          }
+
+          const next = current + 1;
+          config.expo.ios.buildNumber = String(next);
+          fs.writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
+          console.log(`Incremented iOS build number: ${current} -> ${next}`);
+          NODE
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.json
+          git commit -m "chore: increment iOS build number [skip ci]"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

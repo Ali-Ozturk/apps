@@ -1,6 +1,6 @@
 {
   "name": "everyday-toolbox",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "main": "expo/AppEntry.js",
   "scripts": {
@@ -15,12 +15,15 @@
     "@react-native-community/datetimepicker": "8.6.0",
     "babel-preset-expo": "~55.0.8",
     "expo": "~55.0.28",
+    "expo-file-system": "~55.0.24",
+    "expo-image-picker": "~55.0.22",
     "expo-notifications": "~55.0.25",
     "expo-secure-store": "~55.0.16",
     "expo-status-bar": "~55.0.6",
     "expo-widgets": "^55.0.20",
     "react": "19.2.0",
-    "react-native": "0.83.10"
+    "react-native": "0.83.10",
+    "react-native-svg": "15.15.3"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

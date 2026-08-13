@@ -21,6 +21,7 @@ function ToolboxOverviewWidget(props, environment) {
       ) : (
         <Text modifiers={[font({ size: compact ? 12 : 14 }), foregroundStyle('#667085')]}>No groceries yet</Text>
       )}
+      {props.checklistTotal > 0 ? <Text modifiers={[font({ size: compact ? 12 : 14 }), foregroundStyle('#344054')]}>Checklist {props.checklistDone}/{props.checklistTotal}</Text> : null}
       {!compact && props.lastTitle ? (
         <Text modifiers={[font({ size: 13 }), foregroundStyle('#344054')]}>Last: {props.lastTitle} ({props.lastRelative})</Text>
       ) : null}
