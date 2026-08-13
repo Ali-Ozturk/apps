@@ -30,6 +30,7 @@
       "expo-notifications",
       "expo-secure-store",
       "expo-image-picker",
+      "expo-media-library",
       [
         "expo-widgets",
         {
