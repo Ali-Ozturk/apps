@@ -3,7 +3,7 @@
     "name": "Everyday Toolbox",
     "slug": "everyday-toolbox",
     "icon": "./assets/icon.png",
-    "version": "2.1.0",
+    "version": "2.2.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
