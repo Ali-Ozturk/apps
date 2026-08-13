@@ -17,6 +17,10 @@ function replaceOnce(filePath, before, after, label) {
   }
 
   if (!source.includes(before)) {
+    if (!after) {
+      return false;
+    }
+
     throw new Error(`${label} patch failed: expected source was not found in ${filePath}.`);
   }
 

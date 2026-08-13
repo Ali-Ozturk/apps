@@ -62,9 +62,6 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm ci
 
-      - name: Patch widget autolinking
-        run: npm run postinstall
-
       - name: Generate native iOS project
         run: npx expo prebuild --platform ios --clean
       
