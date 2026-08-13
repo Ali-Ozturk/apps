@@ -28,7 +28,28 @@
     "plugins": [
       "@react-native-community/datetimepicker",
       "expo-notifications",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "com.alioz.everydaytoolbox.widgets",
+          "groupIdentifier": "group.com.alioz.everydaytoolbox",
+          "widgets": [
+            {
+              "name": "ToolboxOverviewWidget",
+              "displayName": "Everyday Overview",
+              "description": "See groceries, the oldest Last Time item, and the next reminder.",
+              "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge"]
+            },
+            {
+              "name": "ToolboxCountdownWidget",
+              "displayName": "Countdowns",
+              "description": "See your most important upcoming countdown.",
+              "supportedFamilies": ["systemSmall", "systemMedium", "accessoryRectangular"]
+            }
+          ]
+        }
+      ]
     ]
   }
 }
