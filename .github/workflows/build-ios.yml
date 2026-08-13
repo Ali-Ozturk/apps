@@ -27,6 +27,17 @@ jobs:
 
       - name: Generate native iOS project
         run: npx expo prebuild --platform ios --clean
+      
+      - name: Show generated iOS project
+        run: |
+          echo "Generated iOS files:"
+          find ios -maxdepth 2 -type d -print
+
+          echo
+          echo "Schemes:"
+          xcodebuild \
+            -workspace "$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)" \
+            -list
 
       - name: Install CocoaPods dependencies
         working-directory: ios
@@ -47,16 +58,30 @@ jobs:
 
           echo "Found workspace: $WORKSPACE"
 
+          echo "Available schemes:"
+          xcodebuild -workspace "$WORKSPACE" -list
+
           SCHEME="$(xcodebuild \
             -workspace "$WORKSPACE" \
             -list \
             -json | python3 -c '
           import json, sys
+
           data = json.load(sys.stdin)
           schemes = data.get("workspace", {}).get("schemes", [])
+
           if not schemes:
               raise SystemExit("No Xcode schemes found")
-          print(schemes[0])
+
+          # Prefer a scheme that looks like the actual app rather than Pods/dependencies.
+          candidates = [
+              s for s in schemes
+              if not s.startswith(("Pods-", "React", "Expo"))
+          ]
+
+          scheme = candidates[0] if candidates else schemes[0]
+
+          print(scheme)
           ')"
 
           echo "Using scheme: $SCHEME"
@@ -82,24 +107,25 @@ jobs:
             DEVELOPMENT_TEAM="" \
             clean build
 
-      - name: Find built app
+        - name: Find built app
         id: app
         shell: bash
         run: |
           set -euo pipefail
 
-          APP_PATH="$(find build/DerivedData/Build/Products/Release-iphoneos \
-            -maxdepth 1 \
-            -name "*.app" \
+          APP_PATH="$(find build/DerivedData/Build/Products \
             -type d \
+            -name "*.app" \
+            ! -path "*/Pods.build/*" \
+            ! -path "*/XCFrameworkIntermediates/*" \
             -print \
             -quit)"
 
           if [ -z "$APP_PATH" ]; then
             echo "Could not find built .app"
             echo
-            echo "Contents of build products:"
-            find build/DerivedData/Build/Products -maxdepth 3 -print || true
+            echo "Searching entire DerivedData:"
+            find build/DerivedData -type d -name "*.app" -print || true
             exit 1
           fi
 
@@ -144,6 +170,75 @@ jobs:
 
           echo "Created IPA:"
           ls -lh hello-world.ipa
+      
+      - name: Generate SideStore source.json
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP_PATH="${{ steps.app.outputs.app_path }}"
+          PLIST="$APP_PATH/Info.plist"
+
+          NAME="$(/usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Print :CFBundleName" "$PLIST")"
+
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST")"
+          VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")"
+          BUILD_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST")"
+          MIN_IOS="$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$PLIST" 2>/dev/null || true)"
+
+          IPA_SIZE="$(stat -f%z hello-world.ipa)"
+          RELEASE_DATE="$(date -u +"%Y-%m-%d")"
+
+          export NAME
+          export BUNDLE_ID
+          export VERSION
+          export BUILD_VERSION
+          export MIN_IOS
+          export IPA_SIZE
+          export RELEASE_DATE
+
+          python3 <<'PY'
+          import json
+          import os
+
+          version_entry = {
+              "version": os.environ["VERSION"],
+              "buildVersion": os.environ["BUILD_VERSION"],
+              "date": os.environ["RELEASE_DATE"],
+              "size": int(os.environ["IPA_SIZE"]),
+              "downloadURL": "https://apps.alihan.dk/ipa/hello-world.ipa",
+              "localizedDescription": "Automated build."
+          }
+
+          if os.environ.get("MIN_IOS"):
+              version_entry["minOSVersion"] = os.environ["MIN_IOS"]
+
+          source = {
+              "$schema": "https://github.com/SideStore/sidestore-source-types/raw/main/schema.json",
+              "name": "Ali's Apps",
+              "identifier": "dk.alihan.apps",
+              "sourceURL": "https://apps.alihan.dk/source.json",
+              "apps": [
+                  {
+                      "name": os.environ["NAME"],
+                      "bundleIdentifier": os.environ["BUNDLE_ID"],
+                      "developerName": "Ali",
+                      "subtitle": "Personal iOS apps",
+                      "localizedDescription": "Personal app distributed through apps.alihan.dk.",
+                      "iconURL": "https://apps.alihan.dk/icons/hello-world.png",
+                      "versions": [
+                          version_entry
+                      ]
+                  }
+              ]
+          }
+
+          with open("source.json", "w") as f:
+              json.dump(source, f, indent=2)
+
+          print(json.dumps(source, indent=2))
+          PY
 
       - name: Verify IPA contents
         shell: bash
@@ -159,10 +254,12 @@ jobs:
 
           echo "IPA structure looks valid."
 
-      - name: Upload unsigned IPA
+      - name: Upload IPA and SideStore source
         uses: actions/upload-artifact@v4
         with:
-          name: hello-world-unsigned-ipa
-          path: hello-world.ipa
+          name: hello-world-sidestore
+          path: |
+            hello-world.ipa
+            source.json
           if-no-files-found: error
           retention-days: 30
