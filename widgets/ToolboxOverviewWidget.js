@@ -1,5 +1,5 @@
 import { HStack, Spacer, Text, VStack } from '@expo/ui/swift-ui';
-import { containerBackground, font, foregroundStyle, padding } from '@expo/ui/swift-ui/modifiers';
+import { background, font, foregroundStyle, padding } from '@expo/ui/swift-ui/modifiers';
 import { createWidget } from 'expo-widgets';
 
 function ToolboxOverviewWidget(props, environment) {
@@ -11,7 +11,7 @@ function ToolboxOverviewWidget(props, environment) {
     <VStack
       alignment="leading"
       spacing={compact ? 6 : 8}
-      modifiers={[containerBackground('#F5F7FB', 'widget'), padding({ all: 14 })]}
+      modifiers={[background('#F5F7FB'), padding({ all: 14 })]}
     >
       <Text modifiers={[font({ weight: 'bold', size: compact ? 13 : 15 }), foregroundStyle('#111827')]}>Everyday Toolbox</Text>
       <Spacer />

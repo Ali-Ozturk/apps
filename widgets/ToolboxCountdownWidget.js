@@ -1,5 +1,5 @@
 import { Spacer, Text, VStack } from '@expo/ui/swift-ui';
-import { containerBackground, font, foregroundStyle, padding } from '@expo/ui/swift-ui/modifiers';
+import { background, font, foregroundStyle, padding } from '@expo/ui/swift-ui/modifiers';
 import { createWidget } from 'expo-widgets';
 
 function ToolboxCountdownWidget(props, environment) {
@@ -11,7 +11,7 @@ function ToolboxCountdownWidget(props, environment) {
     <VStack
       alignment="leading"
       spacing={8}
-      modifiers={[containerBackground('#102A43', 'widget'), padding({ all: 14 })]}
+      modifiers={[background('#102A43'), padding({ all: 14 })]}
     >
       <Text modifiers={[font({ weight: 'bold', size: compact ? 13 : 15 }), foregroundStyle('#D9EAF7')]}>Countdown</Text>
       <Spacer />
