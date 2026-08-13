@@ -71,9 +71,16 @@ jobs:
           find ios -maxdepth 2 -type d -print
 
           echo
-          echo "Schemes:"
+          echo "Generated Xcode project schemes:"
+          PROJECT="$(find ios -maxdepth 1 -name '*.xcodeproj' -print -quit)"
+
+          if [ ! -d "$PROJECT" ]; then
+            echo "Xcode project does not exist: $PROJECT"
+            exit 1
+          fi
+
           xcodebuild \
-            -workspace "$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)" \
+            -project "$PROJECT" \
             -list
 
       - name: Install CocoaPods dependencies
