@@ -9,11 +9,11 @@
     "ios:simulator": "npx eas-cli build --platform ios --profile simulator"
   },
   "dependencies": {
-    "babel-preset-expo": "~57.0.0",
-    "expo": "~57.0.12",
-    "expo-status-bar": "~57.0.1",
-    "react": "19.2.3",
-    "react-native": "0.86.2"
+    "babel-preset-expo": "~54.0.12",
+    "expo": "~54.0.36",
+    "expo-status-bar": "~3.0.9",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
