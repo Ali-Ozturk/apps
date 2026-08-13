@@ -9,7 +9,7 @@
       "**/*"
     ],
     "ios": {
-      "buildNumber": "3",
+      "buildNumber": "4",
       "supportsTablet": true,
       "bundleIdentifier": "com.alioz.everydaytoolbox",
       "infoPlist": {
@@ -40,13 +40,21 @@
               "name": "ToolboxOverviewWidget",
               "displayName": "Everyday Overview",
               "description": "See groceries, the oldest Last Time item, and the next reminder.",
-              "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge"]
+              "supportedFamilies": [
+                "systemSmall",
+                "systemMedium",
+                "systemLarge"
+              ]
             },
             {
               "name": "ToolboxCountdownWidget",
               "displayName": "Countdowns",
               "description": "See your most important upcoming countdown.",
-              "supportedFamilies": ["systemSmall", "systemMedium", "accessoryRectangular"]
+              "supportedFamilies": [
+                "systemSmall",
+                "systemMedium",
+                "accessoryRectangular"
+              ]
             }
           ]
         }
