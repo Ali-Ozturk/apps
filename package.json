@@ -37,5 +37,19 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "eas-cli": "^21.8.0"
+  },
+  "expo": {
+    "autolinking": {
+      "exclude": [
+        "@expo/ui",
+        "expo-widgets"
+      ]
+    },
+    "install": {
+      "exclude": [
+        "@expo/ui",
+        "expo-widgets"
+      ]
+    }
   }
 }

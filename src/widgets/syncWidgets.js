@@ -5,8 +5,10 @@ import { EXTRA_KEYS, KEYS } from '../constants';
 import { dateTime, remainingLabel, relative, today, time, cap } from '../utils/date';
 import { ensureToday } from '../utils/lists';
 
+const WIDGETS_ENABLED = process.env.EXPO_PUBLIC_ENABLE_WIDGETS === '1';
+
 export async function syncWidgets() {
-  if (Platform.OS !== 'ios' || __DEV__) return;
+  if (!WIDGETS_ENABLED || Platform.OS !== 'ios' || __DEV__) return;
 
   try {
     let ToolboxOverviewWidget;

@@ -37,35 +37,6 @@
           "photosPermission": "Allow Everyday Toolbox to save receipt photos to your library.",
           "savePhotosPermission": "Allow Everyday Toolbox to save receipt photos to your library."
         }
-      ],
-      [
-        "expo-widgets",
-        {
-          "bundleIdentifier": "com.alioz.everydaytoolbox.widgets",
-          "groupIdentifier": "group.com.alioz.everydaytoolbox",
-          "widgets": [
-            {
-              "name": "ToolboxOverviewWidget",
-              "displayName": "Everyday Overview",
-              "description": "See groceries, the oldest Last Time item, and the next reminder.",
-              "supportedFamilies": [
-                "systemSmall",
-                "systemMedium",
-                "systemLarge"
-              ]
-            },
-            {
-              "name": "ToolboxCountdownWidget",
-              "displayName": "Countdowns",
-              "description": "See your most important upcoming countdown.",
-              "supportedFamilies": [
-                "systemSmall",
-                "systemMedium",
-                "accessoryRectangular"
-              ]
-            }
-          ]
-        }
       ]
     ]
   }

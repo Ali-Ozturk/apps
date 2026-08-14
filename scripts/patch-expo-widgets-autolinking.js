@@ -65,6 +65,11 @@ const autolinkingPath = path.join(
 const before = 'Expo::AutolinkingManager.new(self, @current_target_definition, options).resolve';
 const after = 'Expo::AutolinkingManager.new(self, @current_target_definition, options).send(:resolve)';
 
+if (process.env.EXPO_ENABLE_WIDGETS !== '1') {
+  console.log('expo widgets compatibility patches skipped: widgets are disabled for this build.');
+  process.exit(0);
+}
+
 if (!fs.existsSync(expoWidgetsPath)) {
   console.log('expo-widgets autolinking patch skipped: expo-widgets is not installed.');
   process.exit(0);
